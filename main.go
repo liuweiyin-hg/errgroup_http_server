@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -37,6 +40,7 @@ func serveDebug(ctx context.Context, stop <-chan struct{}) error {
 }
 
 func main() {
+	var stopped bool = false
 	done := make(chan error, 2)
 	stop := make(chan struct{})
 
@@ -51,6 +55,17 @@ func main() {
 			return nil
 		})
 
+		g.Go(func() error {
+			c := make(chan os.Signal)
+			signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGUSR1, syscall.SIGUSR2)
+			fmt.Println("启动")
+			s := <-c
+			fmt.Println("退出信号", s)
+			close(stop)
+			stopped = true
+			return nil
+		})
+
 		if err := g.Wait(); err != nil {
 			fmt.Println(err)
 		}
@@ -58,7 +73,6 @@ func main() {
 
 	WebApp(context.Background())
 
-	var stopped bool
 	for i := 0; i < cap(done); i++ {
 		if err := <-done; err != nil {
 			fmt.Printf("error %v \n", err)
